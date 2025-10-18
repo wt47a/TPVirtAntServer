@@ -13,12 +13,17 @@ RUN pip install --no-cache-dir openant
 
 # Create working dir
 WORKDIR /app
-COPY src/main.py /app/
+COPY src/tpvirtserver/__init__.py /app/tpvirtserver/
+COPY src/tpvirtserver/ant_module.py /app/tpvirtserver/
+COPY src/tpvirtserver/http_module.py /app/tpvirtserver/
+COPY src/tpvirtserver/main.py /app/tpvirtserver/
+
 
 # Empty folder for certyficates
 RUN mkdir -p /config
 
 # Environment variables with default values
+ENV PYTHONPATH=/app
 ENV APP_IP=0.0.0.0
 ENV APP_PORT=5000
 ENV CERT_FILE=/config/cert-chain.pem
@@ -26,5 +31,10 @@ ENV KEY_FILE=/config/key.pem
 ENV LOG_LEVEL=INFO
 
 # Default initial script
-CMD ["bash", "-c", "python3 /app/main.py --ip $APP_IP --port $APP_PORT --cert-file $CERT_FILE --key-file $KEY_FILE --log-level $LOG_LEVEL"]
-
+#CMD ["bash", "-c", "python3 /app/tpvirtserver/main.py --ip $APP_IP --port $APP_PORT --cert-file $CERT_FILE --key-file $KEY_FILE --log-level $LOG_LEVEL"]
+CMD sh -c 'python3 -m tpvirtserver.main \
+    --ip $APP_IP \
+    --port $APP_PORT \
+    --cert-file $CERT_FILE \
+    --key-file $KEY_FILE \
+    --log-level $LOG_LEVEL'

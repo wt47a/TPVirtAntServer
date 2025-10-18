@@ -1,15 +1,12 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import ssl
-import datetime
-import json
 import threading
 import logging
-import argparse
 import time
 
 from openant.easy.node import Node
 from openant.easy.channel import Channel
 from openant.base.commons import format_list
+
+from .__init__ import shared_data
 
 # Definition of Variables
 NETWORK_KEY = [0xB9, 0xA5, 0x21, 0xFB, 0xBD, 0x72, 0xC3, 0x45]
@@ -21,15 +18,18 @@ Channel_Period = 8118   # 8118 counts (~4.04Hz, 4 messages/second)
 Channel_Frequency = 57
 
 #BikeSpeed = 27.0 / 3.6  # m/s => 10km/h
-BikeSpeed = None
-lock = threading.Lock()
+# BikeSpeed = None
+# lock = threading.Lock()
 
 # Fictive Config of Treadmill
 
 
 ##########################################################################
 class AntBikeSpeed:
-    def __init__(self):
+       
+    def __init__(self, shared_data):
+        self.shared_data = shared_data
+        self.running = False
 
         self.ANTMessageCount = 0
         self.ANTMessagePayload = [0, 0, 0, 0, 0, 0, 0, 0]
@@ -48,8 +48,8 @@ class AntBikeSpeed:
         self.TimeProgramStart = time.time()
         self.wheel_circumference = 2.105    # in meters
 
+
     def Create_Next_DataPage(self):
-        global BikeSpeed
         # Define Variables
         self.ANTMessageCount += 1
         self.PageToggleCount = 0
@@ -60,10 +60,10 @@ class AntBikeSpeed:
         
         BikeSpeedEventTimeFull = 1024.0 * self.TotalIntervals / self.event_interval
         
-        with lock:
+        with shared_data.lock:
             # SPEED calculation
-            avg_speed = 0.5 * (BikeSpeed + self.LastBikeSpeed) /3.6
-            self.LastBikeSpeed = BikeSpeed
+            avg_speed = 0.5 * (shared_data.BikeSpeed + self.LastBikeSpeed) /3.6
+            self.LastBikeSpeed = shared_data.BikeSpeed
             distance_traveled = avg_speed / self.event_interval
             rotations = distance_traveled / self.wheel_circumference
             self.TotalWheelRotations += rotations
@@ -108,7 +108,7 @@ class AntBikeSpeed:
             self.ANTMessagePayload[0] ^= 0x80
 
         if logging.getLogger().isEnabledFor(logging.DEBUG):
-            logging.debug(f"TotaInt:{self.TotalIntervals} BikeSpeed:{BikeSpeed:.2f} [m/s] avg_speed: {avg_speed:.2f} [m/s] distance_traveled: {distance_traveled:.2f} Rotations:{self.TotalWheelRotations:.2f}")
+            logging.debug(f"TotaInt:{self.TotalIntervals} BikeSpeed:{shared_data.BikeSpeed:.2f} [m/s] avg_speed: {avg_speed:.2f} [m/s] distance_traveled: {distance_traveled:.2f} Rotations:{self.TotalWheelRotations:.2f}")
 
         # ANTMessageCount reset
         if self.ANTMessageCount > 68:
@@ -161,126 +161,25 @@ class AntBikeSpeed:
             logging.debug("Final checking...")
             # not sure if there is anything else we should check?! :)
 
+    def _mainAntBroadcast(self):
+        if logging.getLogger().isEnabledFor(logging.INFO):
+            logging.info(f"ANT+ Send Broadcast")
 
-###########################################################################################################################
-def mainAntBroadcast():
-    if logging.getLogger().isEnabledFor(logging.INFO):
-        logging.info(f"ANT+ Send Broadcast Demo")
-
-    ant_senddemo = AntBikeSpeed()
-
-    try:
-        ant_senddemo.OpenChannel()  # start
-    except KeyboardInterrupt:
-        logging.debug("Closing ANT+ Channel!")
-    finally:
-        logging.debug("Finally...")
-
-    logging.debug("Close demo...")
-
-# ======================================================
-# HTTPD
-# ======================================================
-
-class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        # Obsługa żądania GET
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        response = {"message": "This is a GET response", "status": "success"}
-        self.wfile.write(json.dumps(response).encode("utf-8"))
-
-    def do_POST(self):
-        global BikeSpeed
-        # Obsługa żądania POST
-        content_length = int(self.headers["Content-Length"])
-        post_data = self.rfile.read(content_length)
-
+        # ant_senddemo = AntBikeSpeed()
         try:
-            data = json.loads(post_data)
-            if isinstance(data, list):
-                data = data[0]  # Pobierz pierwszy element, jeśli to lista
+            self.OpenChannel()
+        except KeyboardInterrupt:
+            logging.debug("Closing ANT+ Channel!")
+        finally:
+            logging.debug("Finally...")
 
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(
-                json.dumps({"message": "JSON received successfully", "received_data": data}).encode("utf-8")
-            )
+        logging.debug("Close ant broadcast...")
         
-            if logging.getLogger().isEnabledFor(logging.DEBUG):
-                logging.debug(f"Received JSON: {data}")
-        
-            speed_rec = data['speed']
-            speed_kmh = 3.6*speed_rec/1000
-            with lock:
-                BikeSpeed = speed_kmh
-            
-            if logging.getLogger().isEnabledFor(logging.DEBUG):
-                logging.debug(f"Speed [Recv]:{speed_rec} Speed [km/h]: {speed_kmh:.1f}")
+    def start(self):
+        self.running = True
+        self.thread = threading.Thread(target=self._mainAntBroadcast)
+        self.thread.start()
 
-        except json.JSONDecodeError:
-            self.send_response(400)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "Invalid JSON"}).encode("utf-8"))
-
-
-def mainHttpd(ip: str, port: int, certFilePath :str, keyFilePath :str):
-    # Tworzenie serwera
-    server_address = (ip, port)
-    httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
-
-    # # Certyfikatu SSL generation
-    # private_key, cert_pem = generate_self_signed_cert()
-
-    # # Write cert and key file
-    # with open("cert.pem", "wb") as cert_file:
-    #     cert_file.write(cert_pem)
-    # with open("key.pem", "wb") as key_file:
-    #     key_file.write(private_key)
-
-    # Konfiguracja SSL
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    #context.load_cert_chain(certfile="config/cert-chain.pem", keyfile="config/key.pem")
-    context.load_cert_chain(certfile = certFilePath, keyfile = keyFilePath)
-
-    # Owijanie serwera w SSL
-    httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
-
-
-    if logging.getLogger().isEnabledFor(logging.INFO):
-        actual_ip, actual_port = httpd.server_address
-        logging.info(f"Server running on https://{actual_ip}:{actual_port}/")
-    
-    httpd.serve_forever()
-
-
-
-
-if __name__ == "__main__":
-    # Konfiguracja parsera argumentów
-    parser = argparse.ArgumentParser(description="Logowanie diagnostyczne")
-    parser.add_argument("--log-level", type=str, choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], default="INFO", help="Log level (default: INFO)")
-    parser.add_argument("--ip", type=str, default="0.0.0.0", help="https server listening address")
-    parser.add_argument("--port", type=int, default=5000, help="https server listening port")
-    parser.add_argument("--cert-file", type=str, default="cert.pem", help="Path to certyficate file")
-    parser.add_argument("--key-file", type=str, default="key.pem",help="Path to key file associated with certyficate")
-
-    args = parser.parse_args()
-
-    # Konfiguracja logowania
-    logging.basicConfig(
-        level=getattr(logging, args.log_level),
-        format="%(asctime)s - %(levelname)s - %(message)s",
-    )
-
-    BikeSpeed = 0 / 3.6  # m/s => 10km/h
-    tAnt = threading.Thread(target=mainAntBroadcast, args=())
-    tHttpd = threading.Thread(target=mainHttpd, args=(args.ip, args.port, args.cert_file, args.key_file))
-
-
-    tAnt.start()
-    tHttpd.start()
-
+    def stop(self):
+        self.running = False
+        self.thread.join()
