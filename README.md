@@ -33,7 +33,7 @@ openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -node
 # Follow the specific device instructions to import the certificate
 
 # Run the software with appropriate parameters (see --help for details)
-python HttpAntServer.py --help
+python main.py --help
 ```
 
 ## Configuration
