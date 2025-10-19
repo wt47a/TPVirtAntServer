@@ -162,5 +162,7 @@ class AntBikeSpeed:
             self.logger.debug("Closing ANT+ ...")
 
     def stop(self):
+        if (self.channel):
+            self.node.remove_channel(self.channel)
         self.node.stop()
         
