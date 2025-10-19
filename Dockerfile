@@ -31,10 +31,4 @@ ENV KEY_FILE=/config/key.pem
 ENV LOG_LEVEL=INFO
 
 # Default initial script
-#CMD ["bash", "-c", "python3 /app/tpvirtserver/main.py --ip $APP_IP --port $APP_PORT --cert-file $CERT_FILE --key-file $KEY_FILE --log-level $LOG_LEVEL"]
-CMD sh -c 'python3 -m tpvirtserver.main \
-    --ip $APP_IP \
-    --port $APP_PORT \
-    --cert-file $CERT_FILE \
-    --key-file $KEY_FILE \
-    --log-level $LOG_LEVEL'
+CMD ["python3", "-m", "tpvirtserver.main"]

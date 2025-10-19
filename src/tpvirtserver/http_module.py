@@ -43,16 +43,16 @@ class TPVHttpPRequestHandler(BaseHTTPRequestHandler):
                 json.dumps({"message": "JSON received successfully", "received_data": data}).encode("utf-8")
             )
         
-            if logging.getLogger().isEnabledFor(logging.DEBUG):
-                logging.debug(f"Received JSON: {data}")
+            if self.logger.isEnabledFor(self.logger.DEBUG):
+                self.logger.debug(f"Received JSON: {data}")
         
             speed_rec = data['speed']
             speed_kmh = 3.6*speed_rec/1000
             with shared_data.lock:
                 shared_data.BikeSpeed = speed_kmh
             
-            if logging.getLogger().isEnabledFor(logging.DEBUG):
-                logging.debug(f"Speed [Recv]:{speed_rec} Speed [km/h]: {speed_kmh:.1f}")
+            if self.logger.isEnabledFor(self.logger.DEBUG):
+                self.logger.debug(f"Speed [Recv]:{speed_rec} Speed [km/h]: {speed_kmh:.1f}")
 
         except json.JSONDecodeError:
             self.send_response(400)
@@ -62,7 +62,8 @@ class TPVHttpPRequestHandler(BaseHTTPRequestHandler):
 
 
 class TPVHttpServer:
-    def __init__(self, ip: str, port: int, certFilePath :str, keyFilePath :str, shared_data):
+    def __init__(self, ip: str, port: int, certFilePath :str, keyFilePath :str, shared_data, logger):
+        self.logger = logger.getChild("HttpServer")
         self.ip = ip
         self.port = port
         self.shared_data = shared_data
@@ -97,13 +98,13 @@ class TPVHttpServer:
        
     
     def _serve(self):
-        if logging.getLogger().isEnabledFor(logging.INFO):
+        if self.logger.isEnabledFor(logging.INFO):
             actual_ip, actual_port = self.httpd.server_address
-            logging.info(f"Server running on https://{actual_ip}:{actual_port}/")
+            self.logger.info(f"Server running on https://{actual_ip}:{actual_port}/")
         self.httpd.serve_forever()
         
     def stop(self):
-        logging.debug("Stopping HTTP server...")
-        self.server.shutdown()
+        self.logger.info("Stopping HTTP server...")
+        self.httpd.shutdown()
         self.thread.join()
-        logging.info("HTTP server stopped.")
+        self.logger.info("HTTP server stopped.")

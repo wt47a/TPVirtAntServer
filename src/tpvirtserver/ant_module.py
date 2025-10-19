@@ -27,9 +27,10 @@ Channel_Frequency = 57
 ##########################################################################
 class AntBikeSpeed:
        
-    def __init__(self, shared_data):
+    def __init__(self, shared_data, logger):
+        self.logger = logger.getChild("AntServer")
+        
         self.shared_data = shared_data
-        self.running = False
 
         self.ANTMessageCount = 0
         self.ANTMessagePayload = [0, 0, 0, 0, 0, 0, 0, 0]
@@ -107,8 +108,8 @@ class AntBikeSpeed:
         if (self.ANTMessageCount >> 2) & 0x01:
             self.ANTMessagePayload[0] ^= 0x80
 
-        if logging.getLogger().isEnabledFor(logging.DEBUG):
-            logging.debug(f"TotaInt:{self.TotalIntervals} BikeSpeed:{shared_data.BikeSpeed:.2f} [m/s] avg_speed: {avg_speed:.2f} [m/s] distance_traveled: {distance_traveled:.2f} Rotations:{self.TotalWheelRotations:.2f}")
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f"TotaInt:{self.TotalIntervals} BikeSpeed:{shared_data.BikeSpeed:.2f} [m/s] avg_speed: {avg_speed:.2f} [m/s] distance_traveled: {distance_traveled:.2f} Rotations:{self.TotalWheelRotations:.2f}")
 
         # ANTMessageCount reset
         if self.ANTMessageCount > 68:
@@ -128,13 +129,17 @@ class AntBikeSpeed:
         )  # Final call for broadcasting data
         
         #
-        if logging.getLogger().isEnabledFor(logging.DEBUG):
-            logging.debug("{:05.2f} TX:{}, {}, {} ".format(self.ActualTime, Device_Number, Device_Type, format_list(ANTMessagePayload)))
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("{:05.2f} TX:{}, {}, {} ".format(self.ActualTime, Device_Number, Device_Type, format_list(ANTMessagePayload)))
 
-    # Open Channel
-    def OpenChannel(self):
+    # Open Channel and start transmission
+    #def OpenChannel(self):
+    def start(self):
 
         self.node = Node()  # initialize the ANT+ device as node
+
+        if self.logger.isEnabledFor(logging.INFO):
+            self.logger.info(f"ANT+ Send Broadcast")
 
         # CHANNEL CONFIGURATION
         self.node.set_network_key(0x00, NETWORK_KEY)  # set network key
@@ -153,33 +158,20 @@ class AntBikeSpeed:
         try:
             self.channel.open()  # Open the ANT-Channel with given configuration
             self.node.start()
-        except KeyboardInterrupt:
-            logging.debug("Closing ANT+ Channel...")
-            self.channel.close()
-            self.node.stop()
         finally:
-            logging.debug("Final checking...")
-            # not sure if there is anything else we should check?! :)
-
-    def _mainAntBroadcast(self):
-        if logging.getLogger().isEnabledFor(logging.INFO):
-            logging.info(f"ANT+ Send Broadcast")
-
-        # ant_senddemo = AntBikeSpeed()
-        try:
-            self.OpenChannel()
-        except KeyboardInterrupt:
-            logging.debug("Closing ANT+ Channel!")
-        finally:
-            logging.debug("Finally...")
-
-        logging.debug("Close ant broadcast...")
-        
-    def start(self):
-        self.running = True
-        self.thread = threading.Thread(target=self._mainAntBroadcast)
-        self.thread.start()
+            if self.channel and self.channel.is_open:
+                self.logger.info("Closing ANT+ Channel...")
+                self.channel.close()
+                self.logger.info("Channel closed.")
+       
+#    def start(self):
+#        self.thread = threading.Thread(target=self.OpenChannel)
+#        self.thread.start()
 
     def stop(self):
-        self.running = False
-        self.thread.join()
+        if self.channel and self.channel.is_open:
+            self.logger.info("Closing ANT+ Channel...")
+            self.channel.close()
+            self.logger.info("Channel closed.")
+        self.node.stop()
+        
