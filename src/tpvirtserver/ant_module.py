@@ -159,19 +159,8 @@ class AntBikeSpeed:
             self.channel.open()  # Open the ANT-Channel with given configuration
             self.node.start()
         finally:
-            if self.channel and self.channel.is_open:
-                self.logger.info("Closing ANT+ Channel...")
-                self.channel.close()
-                self.logger.info("Channel closed.")
-       
-#    def start(self):
-#        self.thread = threading.Thread(target=self.OpenChannel)
-#        self.thread.start()
+            self.logger.debug("Closing ANT+ ...")
 
     def stop(self):
-        if self.channel and self.channel.is_open:
-            self.logger.info("Closing ANT+ Channel...")
-            self.channel.close()
-            self.logger.info("Channel closed.")
         self.node.stop()
         
