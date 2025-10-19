@@ -32,8 +32,8 @@ class AntBikeSpeed:
         
         self.shared_data = shared_data
 
-        self.ANTMessageCount = 0
-        self.ANTMessagePayload = [0, 0, 0, 0, 0, 0, 0, 0]
+        self.ANTMessageCount_Speed = 0
+        self.ANTMessagePayload_Speed = [0, 0, 0, 0, 0, 0, 0, 0]
 
         # Init Variables, needed
         self.event_interval = 1.0 * Channel_Period / 32768
@@ -50,9 +50,9 @@ class AntBikeSpeed:
         self.wheel_circumference = 2.105    # in meters
 
 
-    def Create_Next_DataPage(self):
+    def Create_Next_DataPage_Speed(self):
         # Define Variables
-        self.ANTMessageCount += 1
+        self.ANTMessageCount_Speed += 1
         self.PageToggleCount = 0
         self.PageToggleBit = 0x00;  # or #0x80
 
@@ -79,13 +79,13 @@ class AntBikeSpeed:
             BikeSpeedEventTime_L = (int(self.LastBikeSpeedEventTimeFull)) & 0xFF
 
         # prepare ANT+ message
-        if self.ANTMessageCount <= 2:
+        if self.ANTMessageCount_Speed <= 2:
             # technical message
             self.ANTMessagePayload[0] = 0x02  # DataPage 02 (Manufacturer ID)
             self.ANTMessagePayload[1] = 1  # Manufacturer ID
             self.ANTMessagePayload[2] = 0xFF  # Serial Number
             self.ANTMessagePayload[3] = 0xFF  # Serial Number
-        elif self.ANTMessageCount <= 4:
+        elif self.ANTMessageCount_Speed <= 4:
             # technical message
             self.ANTMessagePayload[0] = 0x03  # DataPage 03 (Serial number and version)
             self.ANTMessagePayload[3] = 1  # HW Revision
@@ -105,21 +105,21 @@ class AntBikeSpeed:
         self.ANTMessagePayload[7] = WheelRotations_H
             
         # Page toogle bit
-        if (self.ANTMessageCount >> 2) & 0x01:
+        if (self.ANTMessageCount_Speed >> 2) & 0x01:
             self.ANTMessagePayload[0] ^= 0x80
 
         if self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug(f"TotaInt:{self.TotalIntervals} BikeSpeed:{shared_data.BikeSpeed:.2f} [m/s] avg_speed: {avg_speed:.2f} [m/s] distance_traveled: {distance_traveled:.2f} Rotations:{self.TotalWheelRotations:.2f}")
 
-        # ANTMessageCount reset
-        if self.ANTMessageCount > 68:
-            self.ANTMessageCount = 0
+        # ANTMessageCount_Speed reset
+        if self.ANTMessageCount_Speed > 68:
+            self.ANTMessageCount_Speed = 0
 
         return self.ANTMessagePayload
 
     # TX Event
     def on_event_tx(self, data):
-        ANTMessagePayload = self.Create_Next_DataPage()
+        ANTMessagePayload = self.Create_Next_DataPage_Speed()
         self.ActualTime = time.time() - self.TimeProgramStart
 
         # ANTMessagePayload = array.array('B', [1, 255, 133, 128, 8, 0, 128, 0])    # just for Debuggung pourpose

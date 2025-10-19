@@ -18,6 +18,8 @@ from .__init__ import shared_data
 # HTTPD
 # ======================================================
 class TPVHttpPRequestHandler(BaseHTTPRequestHandler):
+    logger = None
+    
     def do_GET(self):
         # Obsługa żądania GET
         self.send_response(200)
@@ -43,27 +45,37 @@ class TPVHttpPRequestHandler(BaseHTTPRequestHandler):
                 json.dumps({"message": "JSON received successfully", "received_data": data}).encode("utf-8")
             )
         
-            if self.logger.isEnabledFor(self.logger.DEBUG):
-                self.logger.debug(f"Received JSON: {data}")
+            if TPVHttpPRequestHandler.logger:
+                TPVHttpPRequestHandler.logger.debug(f"Received JSON: {data}")
         
             speed_rec = data['speed']
             speed_kmh = 3.6*speed_rec/1000
             with shared_data.lock:
                 shared_data.BikeSpeed = speed_kmh
             
-            if self.logger.isEnabledFor(self.logger.DEBUG):
-                self.logger.debug(f"Speed [Recv]:{speed_rec} Speed [km/h]: {speed_kmh:.1f}")
+            if TPVHttpPRequestHandler.logger:
+                TPVHttpPRequestHandler.logger.debug(f"Speed [Recv]:{speed_rec} Speed [km/h]: {speed_kmh:.1f}")
 
         except json.JSONDecodeError:
             self.send_response(400)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"error": "Invalid JSON"}).encode("utf-8"))
+    
+    def log_message(self, format, *args):
+        if TPVHttpPRequestHandler.logger:
+            TPVHttpPRequestHandler.logger.debug("%s - - [%s] %s" % (
+                self.client_address[0],
+                self.log_date_time_string(),
+                format % args
+            ))
 
 
 class TPVHttpServer:
     def __init__(self, ip: str, port: int, certFilePath :str, keyFilePath :str, shared_data, logger):
         self.logger = logger.getChild("HttpServer")
+        TPVHttpPRequestHandler.logger = self.logger.getChild("TPVHttpPRequestHandler")
+        
         self.ip = ip
         self.port = port
         self.shared_data = shared_data
