@@ -3,6 +3,7 @@ import ssl
 import json
 import threading
 import logging
+import time
 
 from .__init__ import shared_data
 
@@ -19,6 +20,7 @@ from .__init__ import shared_data
 # ======================================================
 class TPVHttpPRequestHandler(BaseHTTPRequestHandler):
     logger = None
+    shared_data = None
     
     def do_GET(self):
         # Obsługa żądania GET
@@ -49,12 +51,15 @@ class TPVHttpPRequestHandler(BaseHTTPRequestHandler):
                 TPVHttpPRequestHandler.logger.debug(f"Received JSON: {data}")
         
             speed_rec = data['speed']
-            speed_kmh = 3.6*speed_rec/1000
-            with shared_data.lock:
-                shared_data.BikeSpeed = speed_kmh
-            
+            speed_kmh = 3.6*speed_rec/1000.0
+            time_recv = time.time()
+            with self.shared_data.lock:
+                self.shared_data.BikeSpeed = speed_kmh
+                # update last_post_time in server
+                self.shared_data.last_post_time = time_recv
+                
             if TPVHttpPRequestHandler.logger:
-                TPVHttpPRequestHandler.logger.debug(f"Speed [Recv]:{speed_rec} Speed [km/h]: {speed_kmh:.1f}")
+                TPVHttpPRequestHandler.logger.info(f"Speed [Recv]:{speed_rec} Speed [km/h]: {speed_kmh:.1f}")
 
         except json.JSONDecodeError:
             self.send_response(400)
@@ -75,14 +80,15 @@ class TPVHttpServer:
     def __init__(self, ip: str, port: int, certFilePath :str, keyFilePath :str, shared_data, logger):
         self.logger = logger.getChild("HttpServer")
         TPVHttpPRequestHandler.logger = self.logger.getChild("TPVHttpPRequestHandler")
-        
+
         self.ip = ip
         self.port = port
         self.shared_data = shared_data
         
         self.httpd = HTTPServer((self.ip, self.port), TPVHttpPRequestHandler)
         # przekazanie shared_data do handlera poprzez instancję serwera
-        self.httpd.shared_data = self.shared_data
+        TPVHttpPRequestHandler.shared_data = shared_data
+        self.httpd.shared_data = shared_data
    
         # Tworzenie serwera
 
@@ -107,7 +113,9 @@ class TPVHttpServer:
     def start(self):
         self.thread = threading.Thread(target=self._serve)
         self.thread.start()
-       
+        self.watchdog_thread = threading.Thread(target=self._speed_watchdog)
+        self.watchdog_thread.running = True
+        self.watchdog_thread.start()
     
     def _serve(self):
         if self.logger.isEnabledFor(logging.INFO):
@@ -119,4 +127,32 @@ class TPVHttpServer:
         self.logger.info("Stopping HTTP server...")
         self.httpd.shutdown()
         self.thread.join()
+        self.watchdog_thread.running = False
+        self.watchdog_thread.join()
         self.logger.info("HTTP server stopped.")
+    
+    def _speed_watchdog(self):
+        """
+        Watchdog thread: decreases BikeSpeed or closes channel if no new POSTs.
+        Restores channel if new POST arrives.
+        """
+        while self.watchdog_thread.running:
+            if hasattr(self.shared_data, "last_post_time"):
+                now = time.time()
+                elapsed = now - self.shared_data.last_post_time
+                # every 10s halve speed until 30s
+                if elapsed > 3 and elapsed <= 30:
+                    TPVHttpPRequestHandler.logger.info(f"Elapsed time (10,30>, BikeSpeed {self.shared_data.BikeSpeed}")
+                    with self.shared_data.lock:
+                        self.shared_data.BikeSpeed *= 0.5
+                # after 30s set speed to 0
+                elif elapsed > 30 and elapsed <= 300:
+                    TPVHttpPRequestHandler.logger.info(f"Elapsed time (30,300>, BikeSpeed {self.shared_data.BikeSpeed}")
+                    with self.shared_data.lock:
+                        self.shared_data.BikeSpeed = 0.0
+                # after 5 min (300s) set channel closed flag
+                elif elapsed > 300:
+                    TPVHttpPRequestHandler.logger.info(f"Elapsed time (300,*>, BikeSpeed {self.shared_data.BikeSpeed}")
+                    with self.shared_data.lock:
+                        self.shared_data.SpeedChannelClosed = True
+            time.sleep(1)

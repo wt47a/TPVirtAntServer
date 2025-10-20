@@ -61,76 +61,76 @@ class AntBikeSpeed:
         
         BikeSpeedEventTimeFull = 1024.0 * self.TotalIntervals / self.event_interval
         
-        with shared_data.lock:
+        with self.shared_data.lock:
             # SPEED calculation
-            avg_speed = 0.5 * (shared_data.BikeSpeed + self.LastBikeSpeed) /3.6
-            self.LastBikeSpeed = shared_data.BikeSpeed
-            distance_traveled = avg_speed / self.event_interval
-            rotations = distance_traveled / self.wheel_circumference
-            self.TotalWheelRotations += rotations
-            # udate event time and weehl rotations in data frame, only after full rotations. Otherwise send the same event time and number of rotations
-            #if int(self.TotalWheelRotations) != int(self.LasFullTotalWheelRotations):
-            self.LastBikeSpeedEventTimeFull = int (BikeSpeedEventTimeFull)
-            self.LasFullTotalWheelRotations = int(self.TotalWheelRotations)
-            
-            WheelRotations_H = (int(self.LasFullTotalWheelRotations) >> 8) & 0xFF
-            WheelRotations_L = (int(self.LasFullTotalWheelRotations)) & 0xFF
-            BikeSpeedEventTime_H = (int(self.LastBikeSpeedEventTimeFull) >> 8) & 0xFF
-            BikeSpeedEventTime_L = (int(self.LastBikeSpeedEventTimeFull)) & 0xFF
+            avg_speed = 0.5 * (self.shared_data.BikeSpeed + self.LastBikeSpeed) /3.6
+            self.LastBikeSpeed = self.shared_data.BikeSpeed
+        distance_traveled = avg_speed / self.event_interval
+        rotations = distance_traveled / self.wheel_circumference
+        self.TotalWheelRotations += rotations
+        # udate event time and weehl rotations in data frame, only after full rotations. Otherwise send the same event time and number of rotations
+        #if int(self.TotalWheelRotations) != int(self.LasFullTotalWheelRotations):
+        self.LastBikeSpeedEventTimeFull = int (BikeSpeedEventTimeFull)
+        self.LasFullTotalWheelRotations = int(self.TotalWheelRotations)
+        
+        WheelRotations_H = (int(self.LasFullTotalWheelRotations) >> 8) & 0xFF
+        WheelRotations_L = (int(self.LasFullTotalWheelRotations)) & 0xFF
+        BikeSpeedEventTime_H = (int(self.LastBikeSpeedEventTimeFull) >> 8) & 0xFF
+        BikeSpeedEventTime_L = (int(self.LastBikeSpeedEventTimeFull)) & 0xFF
 
         # prepare ANT+ message
         if self.ANTMessageCount_Speed <= 2:
             # technical message
-            self.ANTMessagePayload[0] = 0x02  # DataPage 02 (Manufacturer ID)
-            self.ANTMessagePayload[1] = 1  # Manufacturer ID
-            self.ANTMessagePayload[2] = 0xFF  # Serial Number
-            self.ANTMessagePayload[3] = 0xFF  # Serial Number
+            self.ANTMessagePayload_Speed[0] = 0x02  # DataPage 02 (Manufacturer ID)
+            self.ANTMessagePayload_Speed[1] = 1  # Manufacturer ID
+            self.ANTMessagePayload_Speed[2] = 0xFF  # Serial Number
+            self.ANTMessagePayload_Speed[3] = 0xFF  # Serial Number
         elif self.ANTMessageCount_Speed <= 4:
             # technical message
-            self.ANTMessagePayload[0] = 0x03  # DataPage 03 (Serial number and version)
-            self.ANTMessagePayload[3] = 1  # HW Revision
-            self.ANTMessagePayload[3] = 1  # SW Revision
-            self.ANTMessagePayload[7] = 1  # Model Number
+            self.ANTMessagePayload_Speed[0] = 0x03  # DataPage 03 (Serial number and version)
+            self.ANTMessagePayload_Speed[3] = 1  # HW Revision
+            self.ANTMessagePayload_Speed[3] = 1  # SW Revision
+            self.ANTMessagePayload_Speed[7] = 1  # Model Number
         else:
             # no technical data in standard page
-            self.ANTMessagePayload[0] = 0x00  # Data Page 0 (Standard Data)
-            self.ANTMessagePayload[1] = 0xFF
-            self.ANTMessagePayload[2] = 0xFF
-            self.ANTMessagePayload[3] = 0xFF
+            self.ANTMessagePayload_Speed[0] = 0x00  # Data Page 0 (Standard Data)
+            self.ANTMessagePayload_Speed[1] = 0xFF
+            self.ANTMessagePayload_Speed[2] = 0xFF
+            self.ANTMessagePayload_Speed[3] = 0xFF
         
         # for speed sensor speed is always sent
-        self.ANTMessagePayload[4] = BikeSpeedEventTime_L
-        self.ANTMessagePayload[5] = BikeSpeedEventTime_H
-        self.ANTMessagePayload[6] = WheelRotations_L
-        self.ANTMessagePayload[7] = WheelRotations_H
+        self.ANTMessagePayload_Speed[4] = BikeSpeedEventTime_L
+        self.ANTMessagePayload_Speed[5] = BikeSpeedEventTime_H
+        self.ANTMessagePayload_Speed[6] = WheelRotations_L
+        self.ANTMessagePayload_Speed[7] = WheelRotations_H
             
         # Page toogle bit
         if (self.ANTMessageCount_Speed >> 2) & 0x01:
-            self.ANTMessagePayload[0] ^= 0x80
+            self.ANTMessagePayload_Speed[0] ^= 0x80
 
         if self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug(f"TotaInt:{self.TotalIntervals} BikeSpeed:{shared_data.BikeSpeed:.2f} [m/s] avg_speed: {avg_speed:.2f} [m/s] distance_traveled: {distance_traveled:.2f} Rotations:{self.TotalWheelRotations:.2f}")
+            self.logger.debug(f"TotaInt:{self.TotalIntervals} BikeSpeed:{self.shared_data.BikeSpeed:.2f} [m/s] avg_speed: {avg_speed:.2f} [m/s] distance_traveled: {distance_traveled:.2f} Rotations:{self.TotalWheelRotations:.2f}")
 
         # ANTMessageCount_Speed reset
         if self.ANTMessageCount_Speed > 68:
             self.ANTMessageCount_Speed = 0
 
-        return self.ANTMessagePayload
+        return self.ANTMessagePayload_Speed
 
     # TX Event
     def on_event_tx(self, data):
-        ANTMessagePayload = self.Create_Next_DataPage_Speed()
+        ANTMessagePayload_Speed = self.Create_Next_DataPage_Speed()
         self.ActualTime = time.time() - self.TimeProgramStart
 
-        # ANTMessagePayload = array.array('B', [1, 255, 133, 128, 8, 0, 128, 0])    # just for Debuggung pourpose
+        # ANTMessagePayload_Speed = array.array('B', [1, 255, 133, 128, 8, 0, 128, 0])    # just for Debuggung pourpose
 
         self.channel.send_broadcast_data(
-            self.ANTMessagePayload
+            self.ANTMessagePayload_Speed
         )  # Final call for broadcasting data
         
         #
         if self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug("{:05.2f} TX:{}, {}, {} ".format(self.ActualTime, Device_Number, Device_Type, format_list(ANTMessagePayload)))
+            self.logger.debug("{:05.2f} TX:{}, {}, {} ".format(self.ActualTime, Device_Number, Device_Type, format_list(ANTMessagePayload_Speed)))
 
     # Open Channel and start transmission
     #def OpenChannel(self):
@@ -162,7 +162,9 @@ class AntBikeSpeed:
             self.logger.debug("Closing ANT+ ...")
 
     def stop(self):
+        self.node.stop()
+        self.channel.close()
         if (self.channel):
             self.node.remove_channel(self.channel)
-        self.node.stop()
+        
         
