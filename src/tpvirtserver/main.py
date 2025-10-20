@@ -10,14 +10,6 @@ from .__init__ import shared_data
 from .ant_module import AntBikeSpeed
 from .http_module import TPVHttpServer
 
-BikeSpeed = None
-lock = threading.Lock()
-
-class SharedData:
-    def __init__(self):
-        self.lock = threading.Lock()
-        self.ant_speed = 0
-
 def parse_args():
     # Konfiguracja parsera argumentów
     parser = argparse.ArgumentParser(description="TPVirt ANT+ Server")
@@ -29,6 +21,7 @@ def parse_args():
     parser.add_argument("--use-env", action="store_true", help="Force using environment variables instead of CLI arguments")
     
     args = parser.parse_args()
+    return args
 
 def get_config():
     args = parse_args()
@@ -43,11 +36,11 @@ def get_config():
         key_file = os.getenv("KEY_FILE", "key.pem")
         log_level = os.getenv("LOG_LEVEL", "INFO")
     else:
-        app_ip = args.ip or os.getenv("APP_IP", "0.0.0.0")
-        app_port = args.port or int(os.getenv("APP_PORT", "5000"))
-        cert_file = args.cert_file or os.getenv("CERT_FILE", "cert.pem")
-        key_file = args.key_file or os.getenv("KEY_FILE", "key.pem")
-        log_level = args.log_level or os.getenv("LOG_LEVEL", "INFO")
+        app_ip = args.ip
+        app_port = args.port
+        cert_file = args.cert_file
+        key_file = args.key_file
+        log_level = args.log_level
 
     return app_ip, app_port, cert_file, key_file, log_level
 
@@ -61,36 +54,72 @@ def main():
     )
 
     logging.debug("Sturting up server ....")
-    shared = SharedData()
-    shared.BikeSpeed = 0 / 3.6  # m/s => 10km/h
     
-    httpServer = TPVHttpServer(app_ip, app_port, app_cert_file, app_key_file, shared, logging.getLogger())
-    antServer = AntBikeSpeed(shared, logging.getLogger())
+    shared_data.BikeSpeed = 0 / 3.6  # m/s => 10km/h
+    
+    httpServer = TPVHttpServer(app_ip, app_port, app_cert_file, app_key_file, shared_data, logging.getLogger())
+    antServer = AntBikeSpeed(shared_data, logging.getLogger())
 
-    shared.running = True
+    shared_data.runningAnt = False
+    shared_data.running = True
     httpServer.start()
-    antServer.start()
-
-    
-    runningLoopFlag = True
 
     def shutdown(signum, frame):
-        nonlocal shared
+        #nonlocal shared_data
         logging.info(f"Signal recieved {signum}, closing app...")
-        shared.running = False
+        shared_data.running = False
 
     # Rejestracja obsługi sygnałów
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
     
     try:
-        while shared.running:
+        while shared_data.running:
+            # conditions to reduce speed and stop channel if no data received from client, optionally release ant device while no data arriver for long time
+            if hasattr(shared_data, "last_post_time") and shared_data.last_post_time is not None:
+                now = time.time()
+                elapsed = now - shared_data.last_post_time
+
+                # if last data post was within 100s and ant channel is not running, start it
+                if elapsed < 100:
+                    with shared_data.lock:
+                        if not antServer.isRunning():
+                            shared_data.command_queue.put("ANT_START")
+
+                # every 10s halve speed until 30s
+                if elapsed > 3 and elapsed <= 30:
+                    with shared_data.lock:
+                        shared_data.BikeSpeed *= 0.5
+                # after 30s set speed to 0
+                elif elapsed > 30 and elapsed <= 300:
+                    with shared_data.lock:
+                        shared_data.BikeSpeed = 0.0
+                # after 5 min (300s) set channel closed flag
+                elif elapsed > 300:
+                    with shared_data.lock:
+                        shared_data.command_queue.put("ANT_STOP")
+                
+            # conditions controling ant start / stop on commands from queue
+            if shared_data.command_queue.qsize() > 0:
+                command = shared_data.command_queue.get()
+                if command == "ANT_START":
+                    if not antServer.isRunning():
+                        logging.info("Starting ANT+ server...")
+                        antServer.start()
+                elif command == "ANT_STOP":
+                    if antServer.isRunning():
+                        logging.info("Stopping ANT+ server...")
+                        shared_data.last_post_time = None
+                        antServer.stop()
+            
+            logging.debug(f"Main loop running... BikeSpeed: {shared_data.BikeSpeed:.2f} [m/s]")
             time.sleep(0.25)
-            logging.info(f"Running flag {runningLoopFlag}")
+    except KeyboardInterrupt:
+        shared_data.running = False
+        logging.info("Keyboard interrupt received, closing app...")
     finally:
         httpServer.stop()
         antServer.stop()
-        
 
 if __name__ == "__main__":
     main()
