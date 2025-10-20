@@ -59,7 +59,7 @@ class TPVHttpPRequestHandler(BaseHTTPRequestHandler):
                 self.shared_data.last_post_time = time_recv
                 
             if TPVHttpPRequestHandler.logger:
-                TPVHttpPRequestHandler.logger.info(f"Speed [Recv]:{speed_rec} Speed [km/h]: {speed_kmh:.1f}")
+                TPVHttpPRequestHandler.logger.debug(f"Speed [Recv]:{speed_rec} Speed [km/h]: {speed_kmh:.1f}")
 
         except json.JSONDecodeError:
             self.send_response(400)
@@ -142,17 +142,17 @@ class TPVHttpServer:
                 elapsed = now - self.shared_data.last_post_time
                 # every 10s halve speed until 30s
                 if elapsed > 3 and elapsed <= 30:
-                    TPVHttpPRequestHandler.logger.info(f"Elapsed time (10,30>, BikeSpeed {self.shared_data.BikeSpeed}")
+                    TPVHttpPRequestHandler.logger.debug(f"Elapsed time (10,30>, BikeSpeed {self.shared_data.BikeSpeed}")
                     with self.shared_data.lock:
                         self.shared_data.BikeSpeed *= 0.5
                 # after 30s set speed to 0
                 elif elapsed > 30 and elapsed <= 300:
-                    TPVHttpPRequestHandler.logger.info(f"Elapsed time (30,300>, BikeSpeed {self.shared_data.BikeSpeed}")
+                    TPVHttpPRequestHandler.logger.debug(f"Elapsed time (30,300>, BikeSpeed {self.shared_data.BikeSpeed}")
                     with self.shared_data.lock:
                         self.shared_data.BikeSpeed = 0.0
                 # after 5 min (300s) set channel closed flag
                 elif elapsed > 300:
-                    TPVHttpPRequestHandler.logger.info(f"Elapsed time (300,*>, BikeSpeed {self.shared_data.BikeSpeed}")
+                    TPVHttpPRequestHandler.logger.debug(f"Elapsed time (300,*>, BikeSpeed {self.shared_data.BikeSpeed}")
                     with self.shared_data.lock:
                         self.shared_data.SpeedChannelClosed = True
             time.sleep(1)
