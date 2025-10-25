@@ -137,7 +137,7 @@ class TPVHttpServer:
         Restores channel if new POST arrives.
         """
         while self.watchdog_thread.running:
-            if hasattr(self.shared_data, "last_post_time"):
+            if hasattr(self.shared_data, "last_post_time") and self.shared_data.last_post_time is not None:
                 now = time.time()
                 elapsed = now - self.shared_data.last_post_time
                 # every 10s halve speed until 30s
