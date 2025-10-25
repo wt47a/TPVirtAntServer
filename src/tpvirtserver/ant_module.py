@@ -166,5 +166,3 @@ class AntBikeSpeed:
         self.channel.close()
         if (self.channel):
             self.node.remove_channel(self.channel)
-        
-        
