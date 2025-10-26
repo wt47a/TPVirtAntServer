@@ -4,6 +4,8 @@ import json
 import threading
 import logging
 import time
+from urllib.parse import urlparse, parse_qs
+
 
 from .__init__ import shared_data
 
@@ -23,6 +25,19 @@ class TPVHttpPRequestHandler(BaseHTTPRequestHandler):
     shared_data = None
     
     def do_GET(self):
+        parsed_path = urlparse(self.path)
+        query_params = parse_qs(parsed_path.query)
+        path = parsed_path.path
+        
+        if path.startswith("/diagnostic/antstart"):
+            response = "Starting ANT diagnostic mode..."
+            shared_data.command_queue.put("ANT_START")
+            self.logger.info("ANT diagnostic mode started.")
+        elif path.startswith("/diagnostic/antstop"):
+            response = "Stopping ANT diagnostic mode..."
+            shared_data.command_queue.put("ANT_STOP")
+            self.logger.info("ANT diagnostic mode stopped.")
+            
         # Obsługa żądania GET
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -113,9 +128,6 @@ class TPVHttpServer:
     def start(self):
         self.thread = threading.Thread(target=self._serve)
         self.thread.start()
-        self.watchdog_thread = threading.Thread(target=self._speed_watchdog)
-        self.watchdog_thread.running = True
-        self.watchdog_thread.start()
     
     def _serve(self):
         if self.logger.isEnabledFor(logging.INFO):
@@ -127,32 +139,5 @@ class TPVHttpServer:
         self.logger.info("Stopping HTTP server...")
         self.httpd.shutdown()
         self.thread.join()
-        self.watchdog_thread.running = False
-        self.watchdog_thread.join()
         self.logger.info("HTTP server stopped.")
-    
-    def _speed_watchdog(self):
-        """
-        Watchdog thread: decreases BikeSpeed or closes channel if no new POSTs.
-        Restores channel if new POST arrives.
-        """
-        while self.watchdog_thread.running:
-            if hasattr(self.shared_data, "last_post_time") and self.shared_data.last_post_time is not None:
-                now = time.time()
-                elapsed = now - self.shared_data.last_post_time
-                # every 10s halve speed until 30s
-                if elapsed > 3 and elapsed <= 30:
-                    TPVHttpPRequestHandler.logger.debug(f"Elapsed time (10,30>, BikeSpeed {self.shared_data.BikeSpeed}")
-                    with self.shared_data.lock:
-                        self.shared_data.BikeSpeed *= 0.5
-                # after 30s set speed to 0
-                elif elapsed > 30 and elapsed <= 300:
-                    TPVHttpPRequestHandler.logger.debug(f"Elapsed time (30,300>, BikeSpeed {self.shared_data.BikeSpeed}")
-                    with self.shared_data.lock:
-                        self.shared_data.BikeSpeed = 0.0
-                # after 5 min (300s) set channel closed flag
-                elif elapsed > 300:
-                    TPVHttpPRequestHandler.logger.debug(f"Elapsed time (300,*>, BikeSpeed {self.shared_data.BikeSpeed}")
-                    with self.shared_data.lock:
-                        self.shared_data.SpeedChannelClosed = True
-            time.sleep(1)
+            
