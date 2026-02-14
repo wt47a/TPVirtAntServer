@@ -32,20 +32,22 @@ def get_config():
     if use_env:
         app_ip = os.getenv("APP_IP", "0.0.0.0")
         app_port = int(os.getenv("APP_PORT", "5000"))
+        use_ssl = os.getenv("USE_SSL", "false").lower() in ("1", "true", "yes")
         cert_file = os.getenv("CERT_FILE", "cert.pem")
         key_file = os.getenv("KEY_FILE", "key.pem")
         log_level = os.getenv("LOG_LEVEL", "INFO")
     else:
         app_ip = args.ip
         app_port = args.port
+        use_ssl = args.use_ssl
         cert_file = args.cert_file
         key_file = args.key_file
         log_level = args.log_level
 
-    return app_ip, app_port, cert_file, key_file, log_level
+    return app_ip, app_port, use_ssl, cert_file, key_file, log_level
 
 def main():
-    app_ip, app_port, app_cert_file, app_key_file, app_log_level = get_config()
+    app_ip, app_port, use_ssl, app_cert_file, app_key_file, app_log_level = get_config()
 
     # Konfiguracja logowania
     logging.basicConfig(
@@ -57,7 +59,7 @@ def main():
     
     shared_data.BikeSpeed = 0 / 3.6  # m/s => 10km/h
     
-    httpServer = TPVHttpServer(app_ip, app_port, app_cert_file, app_key_file, shared_data, logging.getLogger())
+    httpServer = TPVHttpServer(app_ip, app_port, use_ssl, app_cert_file, app_key_file, shared_data, logging.getLogger())
     antServer = AntBikeSpeed(shared_data, logging.getLogger())
 
     shared_data.runningAnt = False

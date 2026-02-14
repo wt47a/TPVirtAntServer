@@ -92,7 +92,7 @@ class TPVHttpPRequestHandler(BaseHTTPRequestHandler):
 
 
 class TPVHttpServer:
-    def __init__(self, ip: str, port: int, certFilePath :str, keyFilePath :str, shared_data, logger):
+    def __init__(self, ip: str, port: int, use_ssl: bool, certFilePath :str | None, keyFilePath :str | None, shared_data, logger):
         self.logger = logger.getChild("HttpServer")
         TPVHttpPRequestHandler.logger = self.logger.getChild("TPVHttpPRequestHandler")
 
@@ -106,23 +106,24 @@ class TPVHttpServer:
         self.httpd.shared_data = shared_data
    
         # Tworzenie serwera
+        if use_ssl:
+            # # Certyfikatu SSL generation
+            # private_key, cert_pem = generate_self_signed_cert()
 
-        # # Certyfikatu SSL generation
-        # private_key, cert_pem = generate_self_signed_cert()
+            # # Write cert and key file
+            # with open("cert.pem", "wb") as cert_file:
+            #     cert_file.write(cert_pem)
+            # with open("key.pem", "wb") as key_file:
+            #     key_file.write(private_key)
 
-        # # Write cert and key file
-        # with open("cert.pem", "wb") as cert_file:
-        #     cert_file.write(cert_pem)
-        # with open("key.pem", "wb") as key_file:
-        #     key_file.write(private_key)
+            # Konfiguracja SSL
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            #context.load_cert_chain(certfile="config/cert-chain.pem", keyfile="config/key.pem")
+            context.load_cert_chain(certfile = certFilePath, keyfile = keyFilePath)
 
-        # Konfiguracja SSL
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        #context.load_cert_chain(certfile="config/cert-chain.pem", keyfile="config/key.pem")
-        context.load_cert_chain(certfile = certFilePath, keyfile = keyFilePath)
-
-        # Owijanie serwera w SSL
-        self.httpd.socket = context.wrap_socket(self.httpd.socket, server_side=True)
+            # Owijanie serwera w SSL
+            self.httpd.socket = context.wrap_socket(self.httpd.socket, server_side=True)
+            
         self.thread = None
         
     def start(self):

@@ -26,6 +26,7 @@ RUN mkdir -p /config
 ENV PYTHONPATH=/app
 ENV APP_IP=0.0.0.0
 ENV APP_PORT=5000
+ENV USE_SSL=True
 ENV CERT_FILE=/config/cert-chain.pem
 ENV KEY_FILE=/config/key.pem
 ENV LOG_LEVEL=INFO
